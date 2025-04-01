@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 using System.Xml.Serialization;
+using sudokuuu;
 
 namespace SudokuGame
 {
@@ -116,6 +117,18 @@ namespace SudokuGame
 
             this.Controls.Add(menuStrip);
             this.MainMenuStrip = menuStrip;
+            
+            //Button a = new Button();
+            //a.Text = "1";
+            //a.Location = new Point(10, 10);
+            //a.Size = new Size(30, 30);
+            //this.Controls.Add(a);
+
+            //a.Click += (s, e) =>
+            //{
+            //    NumberSelectForm2 numberForm = new NumberSelectForm2();
+            //    numberForm.AutoSize = true;
+            //};
         }
 
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
@@ -266,7 +279,7 @@ namespace SudokuGame
                 return;
 
             // 创建数字选择窗体
-            NumberSelectForm numberForm = new NumberSelectForm();
+            NumberSelectForm2 numberForm = new NumberSelectForm2();
             numberForm.StartPosition = FormStartPosition.Manual;
 
             // 计算窗体位置
