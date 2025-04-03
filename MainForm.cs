@@ -4,8 +4,11 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 using System.Xml.Serialization;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.Drawing.Drawing2D;
+using System.Threading.Tasks;
+using System.Linq;
 using sudokuuu;
-
 namespace SudokuGame
 {
     public partial class MainForm : Form
@@ -28,10 +31,15 @@ namespace SudokuGame
         private Button hintButton = new Button();
 
         // 存档和排行榜相关
-        private const string SaveFileName = "sudoku_save.xml";
-        private const string LeaderboardFileName = "sudoku_leaderboard.xml";
-        private GameSave currentSave;
+        private const string SaveFileName = "sudoku_save.dat";
+        private const string LeaderboardFileName = "sudoku_leaderboard.dat";
         private List<LeaderboardEntry> leaderboard;
+
+        // 当前选中的数字，用于高亮显示
+        private int selectedNumber = 0;
+
+        // 动画相关
+        private Timer animationTimer = new Timer();
 
         public MainForm()
         {
@@ -39,6 +47,7 @@ namespace SudokuGame
             CreateCells();
             SetupTimer();
             SetupHintControls();
+            SetupAnimationTimer();
             LoadLeaderboard();
 
             // 检查是否有存档
@@ -72,6 +81,7 @@ namespace SudokuGame
             this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = Color.White;
             this.FormClosing += MainForm_FormClosing;
+            this.DoubleBuffered = true; // 启用双缓冲减少闪烁
 
             MenuStrip menuStrip = new MenuStrip();
             ToolStripMenuItem gameMenu = new ToolStripMenuItem("游戏");
@@ -88,15 +98,15 @@ namespace SudokuGame
             ToolStripMenuItem mediumItem = new ToolStripMenuItem("中等");
             ToolStripMenuItem hardItem = new ToolStripMenuItem("困难");
 
-            easyItem.Click += (s, e) => { difficulty = 20; difficultyText = "简单"; NewGame(); };
-            mediumItem.Click += (s, e) => { difficulty = 35; difficultyText = "中等"; NewGame(); };
-            hardItem.Click += (s, e) => { difficulty = 50; difficultyText = "困难"; NewGame(); };
+            easyItem.Click += (s, e) => { difficulty = 20; difficultyText = "简单"; NewGameWithAnimation(); };
+            mediumItem.Click += (s, e) => { difficulty = 35; difficultyText = "中等"; NewGameWithAnimation(); };
+            hardItem.Click += (s, e) => { difficulty = 50; difficultyText = "困难"; NewGameWithAnimation(); };
 
-            newGameItem.Click += (s, e) => NewGame();
+            newGameItem.Click += (s, e) => NewGameWithAnimation();
             saveGameItem.Click += (s, e) => SaveGame();
             loadGameItem.Click += (s, e) => LoadGame();
             checkItem.Click += (s, e) => CheckSolution();
-            solveItem.Click += (s, e) => SolvePuzzle();
+            solveItem.Click += (s, e) => SolvePuzzleWithAnimation();
             leaderboardItem.Click += (s, e) => ShowLeaderboard();
             exitItem.Click += (s, e) => Application.Exit();
 
@@ -117,18 +127,6 @@ namespace SudokuGame
 
             this.Controls.Add(menuStrip);
             this.MainMenuStrip = menuStrip;
-            
-            //Button a = new Button();
-            //a.Text = "1";
-            //a.Location = new Point(10, 10);
-            //a.Size = new Size(30, 30);
-            //this.Controls.Add(a);
-
-            //a.Click += (s, e) =>
-            //{
-            //    NumberSelectForm2 numberForm = new NumberSelectForm2();
-            //    numberForm.AutoSize = true;
-            //};
         }
 
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
@@ -185,6 +183,88 @@ namespace SudokuGame
             Controls.Add(hintButton);
         }
 
+        private void SetupAnimationTimer()
+        {
+            animationTimer.Interval = 50;
+            animationTimer.Tick += AnimationTimer_Tick;
+        }
+
+        // 用于动画效果的计数器和变量
+        private int animationCount = 0;
+        private List<SudokuCell> highlightedCells = new List<SudokuCell>();
+        private int highlightFadeCount = 0;
+        private bool isFadingOut = false;
+
+        private void AnimationTimer_Tick(object sender, EventArgs e)
+        {
+            // 处理数字选择的高亮效果
+            if (highlightedCells.Count > 0)
+            {
+                highlightFadeCount++;
+
+                if (!isFadingOut && highlightFadeCount >= 10) // 持续高亮一段时间
+                {
+                    isFadingOut = true;
+                    highlightFadeCount = 0;
+                }
+
+                if (isFadingOut)
+                {
+                    // 淡出效果
+                    int alpha = 255 - (highlightFadeCount * 25); // 降低透明度
+                    if (alpha <= 0)
+                    {
+                        // 动画结束，恢复正常
+                        foreach (var cell in highlightedCells)
+                        {
+                            ResetCellAppearance(cell);
+                        }
+                        highlightedCells.Clear();
+                        animationTimer.Stop();
+                        isFadingOut = false;
+                    }
+                    else
+                    {
+                        // 更新高亮颜色
+                        Color highlightColor = Color.FromArgb(alpha, 255, 255, 0);
+                        foreach (var cell in highlightedCells)
+                        {
+                            cell.BackColor = highlightColor;
+                        }
+                    }
+                }
+                else
+                {
+                    // 淡入效果
+                    int alpha = Math.Min(255, highlightFadeCount * 50); // 增加透明度
+                    Color highlightColor = Color.FromArgb(alpha, 255, 255, 0);
+                    foreach (var cell in highlightedCells)
+                    {
+                        cell.BackColor = highlightColor;
+                    }
+                }
+            }
+
+            // 处理其他动画效果
+            if (animationCount > 0)
+            {
+                animationCount--;
+                if (animationCount == 0)
+                {
+                    animationTimer.Stop();
+                }
+
+                // 其他动画效果可以在这里实现
+            }
+        }
+
+        private void ResetCellAppearance(SudokuCell cell)
+        {
+            int x = cell.X;
+            int y = cell.Y;
+            cell.BackColor = ((x / 3) + (y / 3)) % 2 == 0 ? Color.FromArgb(240, 240, 240) : Color.White;
+        }
+
         private void UpdateTimerLabel()
         {
             int minutes = elapsedSeconds / 60;
@@ -216,13 +296,11 @@ namespace SudokuGame
                 if (emptyCell != null) break;
             }
 
-            // 如果找到了空白单元格，填入正确的数字
+            // 如果找到了空白单元格，使用动画填入正确的数字
             if (emptyCell != null)
             {
-                emptyCell.Text = solution[emptyCell.X, emptyCell.Y].ToString();
-                emptyCell.Value = solution[emptyCell.X, emptyCell.Y];
-                emptyCell.ForeColor = Color.Green;
-                emptyCell.IsLocked = true;
+                // 播放提示动画
+                AnimateHint(emptyCell, solution[emptyCell.X, emptyCell.Y]);
 
                 hintsRemaining--;
                 hintLabel.Text = $"提示剩余: {hintsRemaining}";
@@ -230,6 +308,32 @@ namespace SudokuGame
             else
             {
                 MessageBox.Show("没有找到需要提示的单元格!", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+
+        private async void AnimateHint(SudokuCell cell, int correctValue)
+        {
+            // 先闪烁单元格
+            for (int i = 0; i < 3; i++)
+            {
+                cell.BackColor = Color.LightGreen;
+                await Task.Delay(100);
+                ResetCellAppearance(cell);
+                await Task.Delay(100);
+            }
+
+            // 设置正确的数字
+            cell.Text = correctValue.ToString();
+            cell.Value = correctValue;
+            cell.ForeColor = Color.Green;
+            cell.IsLocked = true;
+
+            // 显示淡入效果
+            cell.Font = new Font(cell.Font.FontFamily, 1, FontStyle.Bold);
+            for (int size = 1; size <= 12; size++)
+            {
+                cell.Font = new Font(cell.Font.FontFamily, size, FontStyle.Bold);
+                await Task.Delay(10);
             }
         }
 
@@ -264,8 +368,25 @@ namespace SudokuGame
                     cells[x, y].BackColor = ((x / 3) + (y / 3)) % 2 == 0 ? Color.FromArgb(240, 240, 240) : Color.White;
                     cells[x, y].FlatAppearance.BorderColor = Color.Gray;
                     cells[x, y].Click += Cell_Click;
+                    cells[x, y].Paint += Cell_Paint; // 添加自定义绘制事件
 
                     this.Controls.Add(cells[x, y]);
+                }
+            }
+        }
+
+        private void Cell_Paint(object sender, PaintEventArgs e)
+        {
+            SudokuCell cell = (SudokuCell)sender;
+
+            // 为单元格添加边框效果
+            if (cell.Value > 0 && cell.Value == selectedNumber)
+            {
+                // 给选中相同数字的单元格添加特殊边框
+                Rectangle rect = new Rectangle(0, 0, cell.Width - 1, cell.Height - 1);
+                using (Pen pen = new Pen(Color.FromArgb(0, 120, 215), 2))
+                {
+                    e.Graphics.DrawRectangle(pen, rect);
                 }
             }
         }
@@ -274,9 +395,12 @@ namespace SudokuGame
         {
             SudokuCell cell = (SudokuCell)sender;
 
-            // 如果单元格是固定的，则不能修改
-            if (cell.IsLocked)
+            // 如果单元格是固定的，则不能修改，但还是高亮显示相同数字
+            if (cell.Value > 0)
+            {
+                HighlightSameNumbers(cell.Value);
                 return;
+            }
 
             // 创建数字选择窗体
             NumberSelectForm2 numberForm = new NumberSelectForm2();
@@ -289,18 +413,169 @@ namespace SudokuGame
             // 显示数字选择窗体
             if (numberForm.ShowDialog() == DialogResult.OK)
             {
+                int number = numberForm.SelectedNumber;
+
                 // 设置选定的数字
-                if (numberForm.SelectedNumber == 0)
+                if (number == 0)
                 {
                     cell.Text = "";
                     cell.Value = 0;
+                    selectedNumber = 0;
                 }
                 else
                 {
-                    cell.Text = numberForm.SelectedNumber.ToString();
-                    cell.Value = numberForm.SelectedNumber;
+                    // 设置数字动画效果
+                    SetNumberWithAnimation(cell, number);
+
+                    // 高亮显示相同数字
+                    HighlightSameNumbers(number);
                 }
             }
+        }
+
+        private async void SetNumberWithAnimation(SudokuCell cell, int number)
+        {
+            // 保存当前数值以便稍后恢复
+            int oldValue = cell.Value;
+
+            // 设置数字渐入效果
+            cell.Text = number.ToString();
+            cell.Value = number;
+            cell.Font = new Font(cell.Font.FontFamily, 1, FontStyle.Bold);
+
+            for (int size = 1; size <= 12; size++)
+            {
+                cell.Font = new Font(cell.Font.FontFamily, size, FontStyle.Bold);
+                await Task.Delay(5);
+            }
+        }
+
+        private void HighlightSameNumbers(int number)
+        {
+            // 停止之前的动画
+            if (animationTimer.Enabled)
+            {
+                animationTimer.Stop();
+
+                // 重置之前高亮的单元格
+                foreach (var cell in highlightedCells)
+                {
+                    ResetCellAppearance(cell);
+                }
+                highlightedCells.Clear();
+            }
+
+            selectedNumber = number;
+
+            // 找出所有相同数字的单元格
+            highlightedCells = new List<SudokuCell>();
+            for (int y = 0; y < 9; y++)
+            {
+                for (int x = 0; x < 9; x++)
+                {
+                    if (cells[x, y].Value == number)
+                    {
+                        highlightedCells.Add(cells[x, y]);
+                    }
+                }
+            }
+
+            // 重绘所有单元格
+            foreach (var cell in cells)
+            {
+                cell.Invalidate();
+            }
+
+            // 如果有相同数字单元格，开始高亮动画
+            if (highlightedCells.Count > 0)
+            {
+                highlightFadeCount = 0;
+                isFadingOut = false;
+                animationTimer.Start();
+            }
+        }
+
+        private async void NewGameWithAnimation()
+        {
+            // 禁用界面交互
+            this.Enabled = false;
+
+            // 先淡出当前数字
+            for (int y = 0; y < 9; y++)
+            {
+                for (int x = 0; x < 9; x++)
+                {
+                    cells[x, y].Text = "";
+                }
+            }
+            await Task.Delay(200);
+
+            // 重置计时器
+            gameTimer.Stop();
+            elapsedSeconds = 0;
+            UpdateTimerLabel();
+
+            // 重置提示
+            hintsRemaining = 3;
+            hintLabel.Text = $"提示剩余: {hintsRemaining}";
+
+            // 重置选择的数字
+            selectedNumber = 0;
+
+            // 生成新的数独谜题
+            var puzzle = generator.GeneratePuzzle(difficulty);
+            solution = puzzle.Item2;
+            currentPuzzle = puzzle.Item1;
+
+            // 使用动画效果填充单元格
+            for (int y = 0; y < 9; y++)
+            {
+                for (int x = 0; x < 9; x++)
+                {
+                    cells[x, y].Value = puzzle.Item1[x, y];
+                    cells[x, y].IsLocked = puzzle.Item1[x, y] != 0;
+                    cells[x, y].ForeColor = Color.Black;
+                    cells[x, y].IsCorrect = true;
+                    ResetCellAppearance(cells[x, y]);
+
+                    if (cells[x, y].IsLocked)
+                    {
+                        cells[x, y].ForeColor = Color.Blue;
+                    }
+                }
+            }
+
+            // 延迟显示数字，创造渐入效果
+            Random random = new Random();
+            for (int i = 0; i < 81; i++)
+            {
+                int x = random.Next(9);
+                int y = random.Next(9);
+
+                if (cells[x, y].Value > 0 && string.IsNullOrEmpty(cells[x, y].Text))
+                {
+                    cells[x, y].Text = cells[x, y].Value.ToString();
+                    await Task.Delay(10);
+                }
+            }
+
+            // 确保所有格子都已显示
+            for (int y = 0; y < 9; y++)
+            {
+                for (int x = 0; x < 9; x++)
+                {
+                    if (cells[x, y].Value > 0)
+                    {
+                        cells[x, y].Text = cells[x, y].Value.ToString();
+                    }
+                }
+            }
+
+            // 启动计时器
+            gameTimer.Start();
+
+            // 重新启用界面交互
+            this.Enabled = true;
         }
 
         private void NewGame()
@@ -313,6 +588,9 @@ namespace SudokuGame
             // 重置提示
             hintsRemaining = 3;
             hintLabel.Text = $"提示剩余: {hintsRemaining}";
+
+            // 重置选择的数字
+            selectedNumber = 0;
 
             // 生成新的数独谜题
             var puzzle = generator.GeneratePuzzle(difficulty);
@@ -329,6 +607,7 @@ namespace SudokuGame
                     cells[x, y].IsLocked = puzzle.Item1[x, y] != 0;
                     cells[x, y].ForeColor = Color.Black;
                     cells[x, y].IsCorrect = true;
+                    ResetCellAppearance(cells[x, y]);
 
                     if (cells[x, y].IsLocked)
                     {
@@ -343,42 +622,42 @@ namespace SudokuGame
 
         private void SaveGame()
         {
-            // 创建存档对象
-            currentSave = new GameSave
-            {
-                Difficulty = difficulty,
-                DifficultyText = difficultyText,
-                ElapsedSeconds = elapsedSeconds,
-                HintsRemaining = hintsRemaining,
-                Puzzle = new int[9, 9],
-                Solution = new int[9, 9],
-                CurrentState = new CellState[9, 9]
-            };
-
-            // 保存当前游戏状态
-            for (int y = 0; y < 9; y++)
-            {
-                for (int x = 0; x < 9; x++)
-                {
-                    currentSave.Puzzle[x, y] = currentPuzzle[x, y];
-                    currentSave.Solution[x, y] = solution[x, y];
-
-                    currentSave.CurrentState[x, y] = new CellState
-                    {
-                        Value = cells[x, y].Value,
-                        IsLocked = cells[x, y].IsLocked,
-                        ForeColor = cells[x, y].ForeColor.ToArgb()
-                    };
-                }
-            }
-
             try
             {
-                // 序列化并保存游戏
-                XmlSerializer serializer = new XmlSerializer(typeof(GameSave));
+                // 创建游戏存档数据
+                GameSaveData saveData = new GameSaveData
+                {
+                    Difficulty = difficulty,
+                    DifficultyText = difficultyText,
+                    ElapsedSeconds = elapsedSeconds,
+                    HintsRemaining = hintsRemaining,
+                    SelectedNumber = selectedNumber,
+                    Puzzle = SerializeArray(currentPuzzle),
+                    Solution = SerializeArray(solution),
+                    CellStates = new List<CellStateData>()
+                };
+
+                // 保存单元格状态
+                for (int y = 0; y < 9; y++)
+                {
+                    for (int x = 0; x < 9; x++)
+                    {
+                        saveData.CellStates.Add(new CellStateData
+                        {
+                            X = x,
+                            Y = y,
+                            Value = cells[x, y].Value,
+                            IsLocked = cells[x, y].IsLocked,
+                            ForeColor = cells[x, y].ForeColor.ToArgb()
+                        });
+                    }
+                }
+
+                // 使用二进制格式保存
                 using (FileStream stream = new FileStream(SaveFileName, FileMode.Create))
                 {
-                    serializer.Serialize(stream, currentSave);
+                    BinaryFormatter formatter = new BinaryFormatter();
+                    formatter.Serialize(stream, saveData);
                 }
 
                 MessageBox.Show("游戏已成功保存!", "保存成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -400,42 +679,50 @@ namespace SudokuGame
                     return;
                 }
 
-                XmlSerializer serializer = new XmlSerializer(typeof(GameSave));
+                // 使用二进制格式加载
+                GameSaveData saveData;
                 using (FileStream stream = new FileStream(SaveFileName, FileMode.Open))
                 {
-                    currentSave = (GameSave)serializer.Deserialize(stream);
+                    BinaryFormatter formatter = new BinaryFormatter();
+                    saveData = (GameSaveData)formatter.Deserialize(stream);
                 }
 
                 // 停止当前计时器
                 gameTimer.Stop();
 
                 // 恢复游戏状态
-                difficulty = currentSave.Difficulty;
-                difficultyText = currentSave.DifficultyText;
-                elapsedSeconds = currentSave.ElapsedSeconds;
-                hintsRemaining = currentSave.HintsRemaining;
-                solution = currentSave.Solution;
-                currentPuzzle = currentSave.Puzzle;
+                difficulty = saveData.Difficulty;
+                difficultyText = saveData.DifficultyText;
+                elapsedSeconds = saveData.ElapsedSeconds;
+                hintsRemaining = saveData.HintsRemaining;
+                selectedNumber = saveData.SelectedNumber;
+                solution = DeserializeArray(saveData.Solution);
+                currentPuzzle = DeserializeArray(saveData.Puzzle);
 
                 // 更新界面
                 UpdateTimerLabel();
                 hintLabel.Text = $"提示剩余: {hintsRemaining}";
 
                 // 恢复单元格状态
-                for (int y = 0; y < 9; y++)
+                foreach (var state in saveData.CellStates)
                 {
-                    for (int x = 0; x < 9; x++)
-                    {
-                        CellState state = currentSave.CurrentState[x, y];
-                        cells[x, y].Value = state.Value;
-                        cells[x, y].Text = state.Value == 0 ? "" : state.Value.ToString();
-                        cells[x, y].IsLocked = state.IsLocked;
-                        cells[x, y].ForeColor = Color.FromArgb(state.ForeColor);
-                    }
+                    int x = state.X;
+                    int y = state.Y;
+                    cells[x, y].Value = state.Value;
+                    cells[x, y].Text = state.Value == 0 ? "" : state.Value.ToString();
+                    cells[x, y].IsLocked = state.IsLocked;
+                    cells[x, y].ForeColor = Color.FromArgb(state.ForeColor);
+                    ResetCellAppearance(cells[x, y]);
                 }
 
                 // 重新启动计时器
                 gameTimer.Start();
+
+                // 刷新高亮显示
+                if (selectedNumber > 0)
+                {
+                    HighlightSameNumbers(selectedNumber);
+                }
 
                 MessageBox.Show("游戏已成功加载!", "加载成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
@@ -445,16 +732,43 @@ namespace SudokuGame
             }
         }
 
+        // 辅助方法：序列化二维数组
+        private List<int> SerializeArray(int[,] array)
+        {
+            List<int> list = new List<int>();
+            for (int y = 0; y < 9; y++)
+            {
+                for (int x = 0; x < 9; x++)
+                {
+                    list.Add(array[x, y]);
+                }
+            }
+            return list;
+        }
+
+        // 辅助方法：反序列化为二维数组
+        private int[,] DeserializeArray(List<int> list)
+        {
+            int[,] array = new int[9, 9];
+            for (int i = 0; i < list.Count; i++)
+            {
+                int x = i % 9;
+                int y = i / 9;
+                array[x, y] = list[i];
+            }
+            return array;
+        }
+
         private void LoadLeaderboard()
         {
             try
             {
                 if (File.Exists(LeaderboardFileName))
                 {
-                    XmlSerializer serializer = new XmlSerializer(typeof(List<LeaderboardEntry>));
                     using (FileStream stream = new FileStream(LeaderboardFileName, FileMode.Open))
                     {
-                        leaderboard = (List<LeaderboardEntry>)serializer.Deserialize(stream);
+                        BinaryFormatter formatter = new BinaryFormatter();
+                        leaderboard = (List<LeaderboardEntry>)formatter.Deserialize(stream);
                     }
                 }
                 else
@@ -472,10 +786,10 @@ namespace SudokuGame
         {
             try
             {
-                XmlSerializer serializer = new XmlSerializer(typeof(List<LeaderboardEntry>));
                 using (FileStream stream = new FileStream(LeaderboardFileName, FileMode.Create))
                 {
-                    serializer.Serialize(stream, leaderboard);
+                    BinaryFormatter formatter = new BinaryFormatter();
+                    formatter.Serialize(stream, leaderboard);
                 }
             }
             catch (Exception ex)
@@ -613,47 +927,75 @@ namespace SudokuGame
             return null;
         }
 
-        private void SolvePuzzle()
+        private async void SolvePuzzleWithAnimation()
         {
             // 停止计时器
             gameTimer.Stop();
 
-            // 显示完整解决方案
+            // 禁用界面交互
+            this.Enabled = false;
+
+            // 收集需要填写的单元格
+            List<SudokuCell> cellsToFill = new List<SudokuCell>();
             for (int y = 0; y < 9; y++)
             {
                 for (int x = 0; x < 9; x++)
                 {
-                    cells[x, y].Text = solution[x, y].ToString();
-                    cells[x, y].Value = solution[x, y];
-                    if (!cells[x, y].IsLocked)
+                    if (!cells[x, y].IsLocked || cells[x, y].Value != solution[x, y])
                     {
-                        cells[x, y].ForeColor = Color.Green;
+                        cellsToFill.Add(cells[x, y]);
                     }
                 }
             }
+
+            // 随机打乱填充顺序，使动画更自然
+            Random random = new Random();
+            cellsToFill = cellsToFill.OrderBy(x => random.Next()).ToList();
+
+            // 依次填入正确数字
+            foreach (var cell in cellsToFill)
+            {
+                int x = cell.X;
+                int y = cell.Y;
+
+                cell.Text = solution[x, y].ToString();
+                cell.Value = solution[x, y];
+                cell.ForeColor = Color.Green;
+
+                await Task.Delay(10);
+            }
+
+            // 重新启用界面交互
+            this.Enabled = true;
         }
     }
 
-    // 用于存档的类
-    public class GameSave
+    // 用于存档的类（可序列化）
+    [Serializable]
+    public class GameSaveData
     {
         public int Difficulty { get; set; }
         public string DifficultyText { get; set; }
         public int ElapsedSeconds { get; set; }
         public int HintsRemaining { get; set; }
-        public int[,] Puzzle { get; set; }
-        public int[,] Solution { get; set; }
-        public CellState[,] CurrentState { get; set; }
+        public int SelectedNumber { get; set; }
+        public List<int> Puzzle { get; set; }
+        public List<int> Solution { get; set; }
+        public List<CellStateData> CellStates { get; set; }
     }
 
-    public class CellState
+    [Serializable]
+    public class CellStateData
     {
+        public int X { get; set; }
+        public int Y { get; set; }
         public int Value { get; set; }
         public bool IsLocked { get; set; }
         public int ForeColor { get; set; }
     }
 
-    // 排行榜条目类
+    // 排行榜条目类（可序列化）
+    [Serializable]
     public class LeaderboardEntry
     {
         public string PlayerName { get; set; }

@@ -9,6 +9,7 @@ namespace SudokuGame
     {
         private List<LeaderboardEntry> leaderboard;
         private ListView listView;
+        private Label filterLabel;
         private ComboBox filterComboBox;
 
         public LeaderboardForm(List<LeaderboardEntry> leaderboard)
@@ -20,45 +21,61 @@ namespace SudokuGame
 
         private void InitializeComponent()
         {
-            this.Text = "数独排行榜";
-            this.Size = new Size(500, 400);
-            this.StartPosition = FormStartPosition.CenterParent;
-            this.FormBorderStyle = FormBorderStyle.FixedDialog;
+            this.filterLabel = new System.Windows.Forms.Label();
+            this.filterComboBox = new System.Windows.Forms.ComboBox();
+            this.listView = new System.Windows.Forms.ListView();
+            this.SuspendLayout();
+            // 
+            // filterLabel
+            // 
+            this.filterLabel.AutoSize = true;
+            this.filterLabel.Location = new System.Drawing.Point(10, 15);
+            this.filterLabel.Name = "filterLabel";
+            this.filterLabel.Size = new System.Drawing.Size(118, 24);
+            this.filterLabel.TabIndex = 0;
+            this.filterLabel.Text = "难度筛选:";
+            // 
+            // filterComboBox
+            // 
+            this.filterComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.filterComboBox.Items.AddRange(new object[] {
+            "全部",
+            "简单",
+            "中等",
+            "困难"});
+            this.filterComboBox.Location = new System.Drawing.Point(80, 12);
+            this.filterComboBox.Name = "filterComboBox";
+            this.filterComboBox.Size = new System.Drawing.Size(100, 32);
+            this.filterComboBox.TabIndex = 1;
+            // 
+            // listView
+            // 
+            this.listView.FullRowSelect = true;
+            this.listView.GridLines = true;
+            this.listView.HideSelection = false;
+            this.listView.Location = new System.Drawing.Point(10, 45);
+            this.listView.Name = "listView";
+            this.listView.Size = new System.Drawing.Size(465, 300);
+            this.listView.TabIndex = 2;
+            this.listView.UseCompatibleStateImageBehavior = false;
+            this.listView.View = System.Windows.Forms.View.Details;
+            // 
+            // LeaderboardForm
+            // 
+            this.ClientSize = new System.Drawing.Size(474, 329);
+            this.Controls.Add(this.filterLabel);
+            this.Controls.Add(this.filterComboBox);
+            this.Controls.Add(this.listView);
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
+            this.Name = "LeaderboardForm";
+            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
+            this.Text = "数独排行榜";
+            this.Load += new System.EventHandler(this.LeaderboardForm_Load);
+            this.ResumeLayout(false);
+            this.PerformLayout();
 
-            // 创建筛选控件
-            Label filterLabel = new Label();
-            filterLabel.Text = "难度筛选:";
-            filterLabel.AutoSize = true;
-            filterLabel.Location = new Point(10, 15);
-
-            filterComboBox = new ComboBox();
-            filterComboBox.Location = new Point(80, 12);
-            filterComboBox.Size = new Size(100, 25);
-            filterComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
-            filterComboBox.Items.AddRange(new object[] { "全部", "简单", "中等", "困难" });
-            filterComboBox.SelectedIndex = 0;
-            filterComboBox.SelectedIndexChanged += FilterComboBox_SelectedIndexChanged;
-
-            // 创建ListView控件
-            listView = new ListView();
-            listView.Location = new Point(10, 45);
-            listView.Size = new Size(465, 300);
-            listView.View = View.Details;
-            listView.FullRowSelect = true;
-            listView.GridLines = true;
-
-            // 添加列
-            listView.Columns.Add("排名", 50);
-            listView.Columns.Add("玩家", 100);
-            listView.Columns.Add("用时", 80);
-            listView.Columns.Add("难度", 70);
-            listView.Columns.Add("日期", 160);
-
-            this.Controls.Add(filterLabel);
-            this.Controls.Add(filterComboBox);
-            this.Controls.Add(listView);
         }
 
         private void FilterComboBox_SelectedIndexChanged(object sender, EventArgs e)
@@ -102,6 +119,11 @@ namespace SudokuGame
 
                 listView.Items.Add(item);
             }
+        }
+
+        private void LeaderboardForm_Load(object sender, EventArgs e)
+        {
+
         }
     }
 }

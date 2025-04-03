@@ -67,6 +67,9 @@
       <SubType>Component</SubType>
     </Compile>
     <Compile Include="SudokuGenerator.cs" />
+    <EmbeddedResource Include="LeaderboardForm.resx">
+      <DependentUpon>LeaderboardForm.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="NumberSelectForm2.resx">
       <DependentUpon>NumberSelectForm2.cs</DependentUpon>
     </EmbeddedResource>
